@@ -4,18 +4,13 @@ management:
   hostname: "localhost"
   port: "8000"
 
-ui:
-  enabled: true
-  hostname: "localhost"
-  port: "3000"
-
 app:
   namespace: "sds-services"
   name: "insights"
 
 scheduler:
   namespace: "sds-services"
-  name: "dagster-stratify"
+  name: "cron-stratify"
 
 compute:
   database:
@@ -35,7 +30,7 @@ image:
 
 schedulerImage:
   registry: containers.intersystems.com/iscinternal/sds-service
-  repository: dagster-stratify
+  repository: cron-stratify
   pullPolicy: Always
 
 # These are the secret fields needed to successfully deploy.

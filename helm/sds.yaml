@@ -38,14 +38,6 @@ externalServicesDeclarations:
    enabledChartField: management.enabled
    label: Management Portal over Load Balancer
    description: Port to access the management portal over a Load Balancer
-- name: dagster-ui
-  type: loadBalancer
-  hostnameChartField: ui.hostname
-  loadBalancerPortChartField: ui.port
-  enabled: false
-  enabledChartField: ui.enabled
-  label: Dagster UI
-  description: Port to access the dagster UI over a Load Balancer
 
 compute:
   computeSpecs:
