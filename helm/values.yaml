@@ -25,6 +25,8 @@ image:
   registry: containers.intersystems.com/iscinternal/sds-service
   repository: insights
   pullPolicy: Always
+  appVersion: "0.1.35"
+  
   # Overrides the image tag whose default is the chart appVersion.
   #tag: "latest"
 
@@ -32,6 +34,7 @@ schedulerImage:
   registry: containers.intersystems.com/iscinternal/sds-service
   repository: cron-stratify
   pullPolicy: Always
+  appVersion: "0.1.1"
 
 # These are the secret fields needed to successfully deploy.
 # They will be injected by the control plane:

@@ -28,7 +28,7 @@ spec:
       containers:
         - name: {{.Values.app.name}}
           # image: containers.intersystems.com/iscinternal/sds-service/sds-stratification:0.1
-          image: {{ .Values.image.registry }}/{{ .Values.image.repository }}:{{ .Chart.AppVersion  }}
+          image: {{ .Values.image.registry }}/{{ .Values.image.repository }}:{{ .Values.image.appVersion  }}
           imagePullPolicy: {{.Values.image.pullPolicy}}
           resources:
             requests:
@@ -37,11 +37,13 @@ spec:
           ports:
             - name: http
               containerPort: 8000
-      initContainers:
         - name: {{.Values.scheduler.name}}
-          image: {{ .Values.schedulerImage.registry }}/{{ .Values.schedulerImage.repository }}:{{ .Chart.AppVersion  }}
+          image: {{ .Values.schedulerImage.registry }}/{{ .Values.schedulerImage.repository }}:{{ .Values.schedulerImage.appVersion  }}
           imagePullPolicy: {{.Values.schedulerImage.pullPolicy}}
-          restartPolicy: Always
+          resources:
+            requests:
+              cpu: {{ .Values.compute.database.cpu }}
+              memory: {{ .Values.compute.database.memory }}
           env:
           - name: STRATIFY_REST_ENDPOINT_URL
             value: http://{clusterIPService.host}:8000

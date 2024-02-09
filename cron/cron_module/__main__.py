@@ -2,7 +2,7 @@ from crontab import CronTab
 from datetime import datetime
 
 mem_cron = CronTab(tab="""
-  * * * * 1-5 python3 cron_module/run_stratify.py
+  0 2 * * 1-5 python3 cron_module/run_stratify.py
 """)
 
 for result in mem_cron.run_scheduler():

@@ -26,7 +26,7 @@ endpoints:
   visibility: internal
   presentation: apiEndpoint
   type: xpto-rest-api
-  clusterIPService: insights
+  clusterIPService: stratify-scheduler
   url: http://{clusterIPService.host}:8000
 
 externalServicesDeclarations:
