@@ -34,7 +34,7 @@ schedulerImage:
   registry: containers.intersystems.com/iscinternal/sds-service
   repository: cron-stratify
   pullPolicy: Always
-  appVersion: "0.1.8"
+  appVersion: "0.1.9"
 
 # These are the secret fields needed to successfully deploy.
 # They will be injected by the control plane:
