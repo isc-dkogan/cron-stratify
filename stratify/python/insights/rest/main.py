@@ -59,6 +59,8 @@ def create_job(conf: Configuration, config_name):
     j.ConfigName = config_name
     hash = hashlib.sha256(j.Config.encode())
     j.ConfigHash = hash.hexdigest()
+    j.HasError = 0
+    j.ErrorMessage = ""
     j.id = base.save_object(conf, j, Job)
     return j
 
@@ -123,33 +125,7 @@ async def stratify(request: Request):
         ref = run_stratify.remote(ctx, job.id)
     except Exception as e:
         print(f"error running job \m {traceback.format_exc()}")
+        base.update_job_error(job_id, str(e))
         return {"job_id": -1}
     
     return {"job_id": job.id}
-
-# @app.get("/stratify/results")
-# async def get_results(request: Request):
-
-#     config_raw = await request.body() # -> str
-
-#     # Validate and load the config into pydantic model
-#     config = load_validate_config(config_raw)   # -> Configuration
-    
-#     engine = base.get_alchemy_engine(config, config.src_server)
-    
-#     inspection = inspect(engine)
-#     table_names = inspection.get_table_names()
-
-#     data = {}
-#     with engine.connect() as conn:
-#         for t in table_names:
-#             query = "SELECT * from " + t
-#             cursor = conn.execute(text(query))
-#             cols = tuple(cursor.keys())
-#             rows = cursor.fetchall()
-#             #rows.insert(0, cols)
-#             zipped_data = list([dict(zip(cols, row)) for row in rows])
-#             data[t] = zipped_data
-        
-#     # print(f"Timestamp {data['timestamp']}")
-#     return data

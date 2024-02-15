@@ -15,7 +15,7 @@ class Job(Base):
     EndTime = Column(TIMESTAMP)
     ConfigHash = Column(String(256))
     Runtime = Column(String(200))
-    HasErrors = Column(Integer)
+    HasError = Column(Integer)
     ErrorMessage = Column(String(10000))
     
 

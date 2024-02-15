@@ -1,3 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: stratifyservice
+  namespace: {{.Release.Name}}
+    
+spec:
+  selector:
+    app: {{.Values.app.name}}
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000
+
+---
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -40,13 +56,9 @@ spec:
         - name: {{.Values.scheduler.name}}
           image: {{ .Values.schedulerImage.registry }}/{{ .Values.schedulerImage.repository }}:{{ .Values.schedulerImage.appVersion  }}
           imagePullPolicy: {{.Values.schedulerImage.pullPolicy}}
-          resources:
-            requests:
-              cpu: {{ .Values.compute.database.cpu }}
-              memory: {{ .Values.compute.database.memory }}
           env:
           - name: STRATIFY_REST_ENDPOINT_URL
-            value: http://{clusterIPService.host}:8000
+            value: http://stratifyservice:8000
       {{- if .Values.compute.database.nodeTypeSelector }}
       nodeSelector:
         sds/node-type: {{ .Values.compute.database.nodeTypeSelector }}

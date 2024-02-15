@@ -718,7 +718,7 @@ def update_job_error(job_id, error_message):
         klass.__table__.create(bind=engine, checkfirst=True)
         
         with Session(engine) as session:
-            session.query(Job).filter(Job.id == job_id).update({"HasErrors": 1, "ErrorMessage": error_message})
+            session.query(Job).filter(Job.id == job_id).update({"HasError": 1, "ErrorMessage": error_message})
             session.commit()
     except Exception as e:
         logger.error(f"Error saving error message for job {job_id}: {e}")
