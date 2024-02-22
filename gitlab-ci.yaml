@@ -1,0 +1,180 @@
+# Official docker image to use for this job.
+# Setting the default image to be used if none is specified
+image: docker:24.0.2
+
+# Docker In Docker is used in each job to handle running / creating images
+# Note: This is not a shared service. A new service intance will be created for each job. This is not currently supported
+# because of the the Gitlab architecture: https://gitlab.com/gitlab-org/gitlab/-/issues/15153
+services:
+  - name: docker.iscinternal.com/relengbuild/docker:24.0.2-dind
+    alias: docker
+
+# Global variables shared with all running jobs
+variables:
+  DOCKER_HOST: tcp://docker:2375
+  DOCKER_TLS_CERTDIR: ""
+  CI_REGISTRY: "docker.iscinternal.com"
+  CONTAINERS_REGISTRY: "containers.intersystems.com"
+  CI_BASE_REGISTRY: "docker.iscinternal.com/sds-docker-dev"
+# Only Run Our Pipeline for git tags. Each job references this same rule when determining if it should run or not.
+# These rules can be modified but for now this will do.
+# .default_rules:
+#   rules:
+#     - if: $CI_COMMIT_TAG
+
+stages:
+  - build # This stage builds artifacts and checks them into docker.iscinternal.com
+  - test # This stage is to run integration tests
+  - release # This stage will have a manual trigger that uses the maven release plugin.
+
+.login_to_registries: &login_to_registries
+  - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" $CI_REGISTRY
+  - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" $CONTAINERS_REGISTRY
+
+build pypi job:
+  stage: build
+ image: python:3.10-slim
+  tags:
+    - docker
+    - protected
+    - x86
+  rules:
+    - if: '$CI_COMMIT_REF_NAME == "main" || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
+  before_script:
+    - export HOME = $CI_PROJECT_DIR
+    - cat $REPOSITORIES_FILE > .pypirc
+    - cat $SETUP_FILE > ./stratify/python/setup.py
+  script:
+    - pip install wheel
+    - python ./stratify/python/setup.py bdist_wheel upload -r artifactory
+  artifacts:
+    reports:
+      dotenv: version.env
+
+build cron docker image job:
+  stage: build
+  tags:
+    - docker
+    - protected
+    - x86
+  rules:
+    - if: '$CI_COMMIT_REF_NAME == "main" || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
+  needs: ["build pypi job"]
+  before_script:
+    - echo $CRON_PROJECT_VERSION
+    - export SDS_SERVICE_NAME=sds-service/cron-stratify:$CRON_PROJECT_VERSION
+    - *login_to_registries
+
+  script:
+    - docker build --build-arg CI_REGISTRY_USER=$CI_REGISTRY_USER --build-arg CI_REGISTRY_PASSWORD=$CI_REGISTRY_PASSWORD --build-arg PROJECT_VERSION=$CRON_PROJECT_VERSION --tag $SDS_SERVICE_NAME -f cron/Dockerfile .
+    - docker tag $SDS_SERVICE_NAME $CI_REGISTRY/sds-docker-dev/fs-solutions/$SDS_SERVICE_NAME
+    - docker push $CI_REGISTRY/sds-docker-dev/fs-solutions/$SDS_SERVICE_NAME
+
+build stratify docker image job:
+  stage: build
+  tags:
+    - docker
+    - protected
+    - x86
+  rules:
+    - if: '$CI_COMMIT_REF_NAME == "main" || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
+  needs: ["build pypi job"]
+  before_script:
+    - echo $STRATIFY_PROJECT_VERSION
+    - export SDS_SERVICE_NAME=sds-service/insights:$STRATIFY_PROJECT_VERSION
+    - *login_to_registries
+
+  script:
+    - docker build --build-arg CI_REGISTRY_USER=$CI_REGISTRY_USER --build-arg CI_REGISTRY_PASSWORD=$CI_REGISTRY_PASSWORD --build-arg PROJECT_VERSION=$STRATIFY_PROJECT_VERSION --tag $SDS_SERVICE_NAME -f stratify/Dockerfile .
+    - docker tag $SDS_SERVICE_NAME $CI_REGISTRY/sds-docker-dev/fs-solutions/$SDS_SERVICE_NAME
+    - docker push $CI_REGISTRY/sds-docker-dev/fs-solutions/$SDS_SERVICE_NAME
+
+build helm chart:
+  image:
+    name: $CI_BASE_REGISTRY/release-engineering/totalview/helm_job_runner:latest
+  tags:
+    - docker
+    - protected
+    - x86
+  rules:
+    - if: '$CI_COMMIT_REF_NAME == "main" || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
+  stage: build
+  variables:
+    CHART_NAME: stratify-scheduler
+    GITHUB_PAGE_URL: intersystems.github.io
+  before_script:
+    - export APP_ROOT=${PWD##*/}
+    - cd ..
+    - echo "cloning repo"
+    # Remove git directory if exist
+    - rm -rf $HELM_REPO
+    # Clone repository using personal access token.
+    - git clone https://$GITHUB_USER:$GITHUB_TOKEN@github.com/intersystems/$HELM_REPO.git
+    - cd $HELM_REPO
+    # Configure email needed for git commit
+    - git config --local user.email "$GITHUB_EMAIL"
+    - git pull
+    - cd ../$APP_ROOT
+  script:
+    - export ICON_FILE_NAME=$(ls ./helm/icon.*)
+    - export ICON_FILE_NAME=${ICON_FILE_NAME##*/}
+    # Edit icon url to match chart repository
+    - 'sed -E -i "s;icon: .*;icon: https://$GITHUB_PAGE_URL/$HELM_REPO/$ICON_FILE_NAME;g" ./helm/Chart.yaml'
+    - rm -rf ../$HELM_REPO/$CHART_NAME
+    - cp -R ./helm ../$HELM_REPO/$CHART_NAME
+    - cd ../$HELM_REPO
+    - helm package ./$CHART_NAME
+    - helm repo index . --url https://$GITHUB_PAGE_URL/$HELM_REPO
+    - git add .
+    - git commit -m "Publishing new version of chart $CHART_NAME pipeline $CI_PIPELINE_ID"
+    - git push
+
+# execute_integration_tests:
+#   stage: test 
+#   image: maven:3-jdk-11
+#   when: manual
+#   tags:
+#     - docker
+#     - protected
+#     - x86
+#   rules:
+#     - if: '$CI_COMMIT_REF_NAME == "main" || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
+#   variables:
+#     CHART_NAME: sds-connectors-java
+#     GITHUB_PAGE_URL: intersystems.github.io
+#     # more to come
+#   before_script:
+#     - echo "We need containers|connections for Oracle, SqlServer, Snowflake, IRIS, and the Open Telemetry collector"
+#     - echo "We must ascertain the resources required by collectors-API testing, which certainly include the above."
+#   script:
+#     - echo "Placeholder for 'mvn clean test -DskipIntegrationTests=false'"
+
+# release connectors jar:
+#   stage: release
+#   image: maven:3-jdk-11
+#   when: manual
+#   tags:
+#     - docker
+#     - protected
+#     - x86
+#   # May need to add a rule to reference the maven release plugin's success
+#   before_script:
+#     - cat $M2_SETTINGS > /tmp/settings.xml
+#   script:
+#     - echo "Unused at the present time."
+#     # - git config --global user.email "srajagop@intersystems.com"
+#     # - git config --global user.name "srajagop"
+#     # - git status
+
+#     # # Adding the ssh key to successfully commit the changes to git when doing a release later.
+#     # # install or update the ssh client
+#     # - 'which ssh-agent || (apt-get update -y && apt-get install openssh-client -y)' 
+#     # - eval $(ssh-agent -s)
+#     # - ssh-add <(echo "$ssh_private_key" | base64 -d)
+#     # - mkdir -p ~/.ssh
+#     # - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no \n\n" > ~/.ssh/config'
+#     # - git remote set-url origin https://username:access_token_or_password@gitlab.com/path_to_your_repo/repo.git
+#     # - git checkout -B "$CI_COMMIT_BRANCH"
+#     # - git config --get remote.origin.url
+#     # - git remote set-url origin https://srajagop@gitlab.com/sds/sds-connectors-java.git
+#     # - mvn release:prepare release:perform -s /tmp/settings.xml --batch-mode -DignoreSnapshots=true -f pom.xml
